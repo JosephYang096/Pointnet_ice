@@ -1,9 +1,10 @@
 log/
 data/
 train/
-output1/
-output2/    
-output3/
-pycache/
+__pycache__/
 data_utils/__pycache__/
 models/__pycache__/
+output1/
+output2/
+output3/
+
