@@ -20,3 +20,8 @@ column_range = (0, 2)
 
 6.visualize
 # If you want to visualize the points just choose True
+
+7.files
+# If you want to save the clustered points as identical txt, you need to choose True
+
+# visualizer can be used to show scatters figure 
