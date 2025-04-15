@@ -13,10 +13,13 @@ def read_env_file(env_path):
 
 
 # 解析冰锥点云文件并返回数据
+
 def read_cone_file(cone_file_path):
-    # 从文件名中提取信息：文件名格式为1_a_b_c_d_e_f
+    # 从文件名中提取信息：文件名格式为1_a_b_c_d_e_f.txt
     filename = os.path.basename(cone_file_path)
-    parts = filename.split('_')
+    # 去除文件扩展名
+    filename_without_ext = os.path.splitext(filename)[0]
+    parts = filename_without_ext.split('_')
 
     # 文件编号为parts[0]，质量中心的XYZ为a, b, c，顶点XYZ为d, e, f
     mass_center = np.array([float(parts[1]), float(parts[2]), float(parts[3])])
@@ -68,12 +71,22 @@ def process_cones_and_translate(cones_folder_path, k, target_positions):
 
 
 # 将平移后的冰锥点云追加到env.txt中
-def append_to_env_file(env_path, translated_cones):
-    with open(env_path, 'a') as file:
-        for cone in translated_cones:
-            for point in cone:
-                file.write(' '.join(map(str, point)) + '\n')
+# def append_to_env_file(env_path, translated_cones):
+#     with open(env_path, 'a') as file:
+#         for cone in translated_cones:
+#             for point in cone:
+#                 file.write(' '.join(map(str, point)) + '\n')
 
+def append_to_env_file(env_file, translated_cones):
+    with open(env_file, 'a') as file:
+        for point in translated_cones:
+            if isinstance(point, (list, tuple, np.ndarray)):
+                # 假设需要的是三维坐标，如果长度不够，补充为零
+                while len(point) < 3:
+                    point = np.append(point, 0)
+            else:
+                point = [point, 0, 0]
+            file.write(' '.join(map(str, point)) + '\n')
 
 # 主函数
 def main(env_file, cones_folder, k, target_positions_file):
@@ -96,9 +109,9 @@ def main(env_file, cones_folder, k, target_positions_file):
 
 
 # 用户输入的路径和数字
-env_file_path = 'path_to_your_env.txt'  # 这里替换为实际的env.txt路径
-cones_folder_path = 'path_to_your_cone_folder'  # 这里替换为实际的冰锥点云文件夹路径
-target_positions_file = 'path_to_target_positions.txt'  # 这里替换为实际的目标位置文件路径
+env_file_path = 'env.txt'  # 这里替换为实际的env.txt路径
+cones_folder_path = 'ice_point_cloud'  # 这里替换为实际的冰锥点云文件夹路径
+target_positions_file = 'control.txt'  # 这里替换为实际的目标位置文件路径
 
 # 读取目标冰锥个数
 with open(target_positions_file, 'r') as f:
