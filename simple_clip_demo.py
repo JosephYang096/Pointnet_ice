@@ -8,9 +8,8 @@ import random
 
 EPSILON = 1e-12
 WEIGHT_INIT_SCALE = 0.1
-PUNCTUATION_TO_SPACE_TRANSLATOR = str.maketrans(
-    {ch: " " for ch in [",", ".", "?", "!", ";", ":", "(", ")", "\"", "'"]}
-)
+PUNCTUATION_CHARS = [",", ".", "?", "!", ";", ":", "(", ")", "\"", "'"]
+PUNCTUATION_TO_SPACE_TRANSLATOR = str.maketrans({ch: " " for ch in PUNCTUATION_CHARS})
 
 
 def tokenize(sentence):
@@ -182,10 +181,16 @@ def main():
 
     print("\n=== 图像检索文本示例 ===")
     for i in range(n):
-        print(f"图像{i} -> 文本{i2t_idx[i]} | Ground Truth={i} | text='{texts[i2t_idx[i]]}'")
+        predicted_index = i2t_idx[i]
+        predicted_text = texts[predicted_index]
+        ground_truth_text = texts[i]
+        print(
+            f"图像{i} -> 预测文本{predicted_index}='{predicted_text}' | "
+            f"Ground Truth文本{i}='{ground_truth_text}'"
+        )
 
     print("\n=== 你需要抓住的 CLIP 意义 ===")
-    print("1) 学的是图文对齐空间，而不是单一任务标签头。")
+    print("1) 学的是图文对齐空间, 而不是单一任务标签头。")
     print("2) 文本提示词可直接变成分类器（零样本能力基础）。")
     print("3) 支持跨模态检索：图找文、文找图。")
     print("4) 让模型从固定类目走向自然语言驱动。")
