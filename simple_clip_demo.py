@@ -6,6 +6,8 @@
 import math
 import random
 
+EPSILON = 1e-12
+WEIGHT_INIT_SCALE = 0.1
 PUNCTUATION_TO_SPACE_TRANSLATOR = str.maketrans(
     {ch: " " for ch in [",", ".", "?", "!", ";", ":", "(", ")", "\"", "'"]}
 )
@@ -52,7 +54,7 @@ def transpose(m):
 def softmax_row(row):
     m = max(row)
     ex = [math.exp(x - m) for x in row]
-    s = sum(ex) + 1e-12
+    s = sum(ex) + EPSILON
     return [v / s for v in ex]
 
 
@@ -118,10 +120,12 @@ def main():
 
     embed_dim = 8
     image_projection_weights = [
-        [0.1 * (random.random() * 2 - 1) for _ in range(embed_dim)] for _ in range(len(image_features[0]))
+        [WEIGHT_INIT_SCALE * (random.random() * 2 - 1) for _ in range(embed_dim)]
+        for _ in range(len(image_features[0]))
     ]
     text_projection_weights = [
-        [0.1 * (random.random() * 2 - 1) for _ in range(embed_dim)] for _ in range(len(text_bow[0]))
+        [WEIGHT_INIT_SCALE * (random.random() * 2 - 1) for _ in range(embed_dim)]
+        for _ in range(len(text_bow[0]))
     ]
 
     lr = 0.2
@@ -144,8 +148,8 @@ def main():
         p_row = softmax_axis1(logits)
         p_col = softmax_axis0(logits)
 
-        loss_i2t = -sum(math.log(p_row[i][i] + 1e-12) for i in range(n)) / n
-        loss_t2i = -sum(math.log(p_col[i][i] + 1e-12) for i in range(n)) / n
+        loss_i2t = -sum(math.log(p_row[i][i] + EPSILON) for i in range(n)) / n
+        loss_t2i = -sum(math.log(p_col[i][i] + EPSILON) for i in range(n)) / n
         loss = 0.5 * (loss_i2t + loss_t2i)
 
         d_logits = zeros(n, n)
