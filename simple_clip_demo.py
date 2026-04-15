@@ -8,7 +8,25 @@ import random
 
 EPSILON = 1e-12
 WEIGHT_INIT_SCALE = 0.1
-PUNCTUATION_CHARS = [",", ".", "?", "!", ";", ":", "(", ")", "\"", "'"]
+PUNCTUATION_CHARS = [
+    ",",
+    ".",
+    "?",
+    "!",
+    ";",
+    ":",
+    "(",
+    ")",
+    "[",
+    "]",
+    "{",
+    "}",
+    "\"",
+    "'",
+    "-",
+    "–",
+    "—",
+]
 PUNCTUATION_TO_SPACE_TRANSLATOR = str.maketrans({ch: " " for ch in PUNCTUATION_CHARS})
 
 
@@ -186,7 +204,7 @@ def main():
         ground_truth_text = texts[i]
         print(
             f"图像{i} -> 预测文本{predicted_index}='{predicted_text}' | "
-            f"Ground Truth文本{i}='{ground_truth_text}'"
+            f"实际文本{i}='{ground_truth_text}'"
         )
 
     print("\n=== 你需要抓住的 CLIP 意义 ===")
