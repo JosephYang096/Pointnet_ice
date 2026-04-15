@@ -6,11 +6,13 @@
 import math
 import random
 
-PUNCT_TRANSLATION = str.maketrans({ch: " " for ch in [",", ".", "?", "!", ";", ":", "(", ")", "\"", "'"]})
+PUNCTUATION_TO_SPACE_TRANSLATOR = str.maketrans(
+    {ch: " " for ch in [",", ".", "?", "!", ";", ":", "(", ")", "\"", "'"]}
+)
 
 
 def tokenize(sentence):
-    cleaned = sentence.lower().translate(PUNCT_TRANSLATION)
+    cleaned = sentence.lower().translate(PUNCTUATION_TO_SPACE_TRANSLATOR)
     return cleaned.split()
 
 
@@ -146,7 +148,6 @@ def main():
         loss_t2i = -sum(math.log(p_col[i][i] + 1e-12) for i in range(n)) / n
         loss = 0.5 * (loss_i2t + loss_t2i)
 
-        # d_logits = 0.5 * ((p_row - eye)/n + (p_col - eye)/n)
         d_logits = zeros(n, n)
         for i in range(n):
             for j in range(n):
@@ -184,7 +185,7 @@ def main():
     print("2) 文本提示词可直接变成分类器（零样本能力基础）。")
     print("3) 支持跨模态检索：图找文、文找图。")
     print("4) 让模型从固定类目走向自然语言驱动。")
-    print(f"\n词表大小: {len(vocab)}")
+    print(f"5) 本示例词表大小: {len(vocab)}")
 
 
 if __name__ == "__main__":
