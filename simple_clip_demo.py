@@ -1,19 +1,17 @@
 """
-一个极简 CLIP 教学脚本（仅依赖 numpy）。
-目标：用最小代码理解 CLIP 的核心意义——把图像和文本映射到同一语义空间，并通过对比学习对齐。
+一个极简 CLIP 教学脚本（纯 Python，无第三方依赖）。
+目标：理解 CLIP 的核心——把图像和文本映射到同一语义空间，并通过对比学习对齐。
 """
 
-import numpy as np
+import math
+import random
+
+PUNCT_TRANSLATION = str.maketrans({ch: " " for ch in [",", ".", "?", "!", ";", ":", "(", ")", "\"", "'"]})
 
 
-def softmax(x: np.ndarray, axis: int) -> np.ndarray:
-    x = x - np.max(x, axis=axis, keepdims=True)
-    ex = np.exp(x)
-    return ex / (np.sum(ex, axis=axis, keepdims=True) + 1e-12)
-
-
-def tokenize(sentence: str):
-    return sentence.lower().replace(",", " ").replace(".", " ").split()
+def tokenize(sentence):
+    cleaned = sentence.lower().translate(PUNCT_TRANSLATION)
+    return cleaned.split()
 
 
 def build_bow(texts):
@@ -23,38 +21,86 @@ def build_bow(texts):
             if token not in vocab:
                 vocab[token] = len(vocab)
 
-    bow = np.zeros((len(texts), len(vocab)), dtype=np.float32)
-    for i, text in enumerate(texts):
+    bow = []
+    for text in texts:
+        vec = [0.0] * len(vocab)
         for token in tokenize(text):
-            bow[i, vocab[token]] += 1.0
+            vec[vocab[token]] += 1.0
+        bow.append(vec)
     return bow, vocab
 
 
-def retrieval_top1(logits: np.ndarray):
-    img_to_text = np.argmax(logits, axis=1)
-    text_to_img = np.argmax(logits, axis=0)
-    n = logits.shape[0]
-    i2t_acc = np.mean(img_to_text == np.arange(n))
-    t2i_acc = np.mean(text_to_img == np.arange(n))
-    return i2t_acc, t2i_acc, img_to_text, text_to_img
+def matmul(a, b):
+    rows = len(a)
+    cols = len(b[0])
+    inner = len(b)
+    out = [[0.0 for _ in range(cols)] for _ in range(rows)]
+    for i in range(rows):
+        for k in range(inner):
+            aik = a[i][k]
+            for j in range(cols):
+                out[i][j] += aik * b[k][j]
+    return out
+
+
+def transpose(m):
+    return [list(col) for col in zip(*m)]
+
+
+def softmax_row(row):
+    m = max(row)
+    ex = [math.exp(x - m) for x in row]
+    s = sum(ex) + 1e-12
+    return [v / s for v in ex]
+
+
+def softmax_axis1(logits):
+    return [softmax_row(row) for row in logits]
+
+
+def softmax_axis0(logits):
+    t = transpose(logits)
+    t_soft = [softmax_row(col) for col in t]
+    return transpose(t_soft)
+
+
+def retrieval_top1(logits):
+    n = len(logits)
+    img_to_text = [max(range(n), key=lambda j: logits[i][j]) for i in range(n)]
+    text_to_img = [max(range(n), key=lambda i: logits[i][j]) for j in range(n)]
+    i2t_acc = sum(1 for i, p in enumerate(img_to_text) if i == p) / n
+    t2i_acc = sum(1 for i, p in enumerate(text_to_img) if i == p) / n
+    return i2t_acc, t2i_acc, img_to_text
+
+
+def zeros(rows, cols):
+    return [[0.0 for _ in range(cols)] for _ in range(rows)]
+
+
+def scale(m, v):
+    return [[x * v for x in row] for row in m]
+
+
+def add(a, b):
+    return [[x + y for x, y in zip(ra, rb)] for ra, rb in zip(a, b)]
+
+
+def sub(a, b):
+    return [[x - y for x, y in zip(ra, rb)] for ra, rb in zip(a, b)]
 
 
 def main():
-    np.random.seed(42)
+    random.seed(42)
 
-    # 6 对“图像-文本”样本：图像先用手工特征模拟（不是像素），让核心逻辑更清晰
-    # 维度含义：[animal, cold, hot, vehicle]
-    image_features = np.array(
-        [
-            [1.0, 0.0, 0.0, 0.0],  # cat
-            [1.0, 0.0, 0.0, 0.0],  # dog
-            [0.0, 1.0, 0.0, 0.0],  # ice
-            [0.0, 0.0, 1.0, 0.0],  # fire
-            [0.0, 0.0, 0.0, 1.0],  # car
-            [0.0, 0.0, 0.0, 1.0],  # bus
-        ],
-        dtype=np.float32,
-    )
+    # 图像手工特征维度: [animal, cold, hot, vehicle]
+    image_features = [
+        [1.0, 0.0, 0.0, 0.0],  # cat
+        [1.0, 0.0, 0.0, 0.0],  # dog
+        [0.0, 1.0, 0.0, 0.0],  # ice
+        [0.0, 0.0, 1.0, 0.0],  # fire
+        [0.0, 0.0, 0.0, 1.0],  # car
+        [0.0, 0.0, 0.0, 1.0],  # bus
+    ]
 
     texts = [
         "a small cat",
@@ -66,57 +112,62 @@ def main():
     ]
 
     text_bow, vocab = build_bow(texts)
-    n_samples = len(texts)
+    n = len(texts)
 
-    # 两个编码器（线性层）：图像->共享空间，文本->共享空间
     embed_dim = 8
-    w_img = 0.1 * np.random.randn(image_features.shape[1], embed_dim).astype(np.float32)
-    w_txt = 0.1 * np.random.randn(text_bow.shape[1], embed_dim).astype(np.float32)
+    image_projection_weights = [
+        [0.1 * (random.random() * 2 - 1) for _ in range(embed_dim)] for _ in range(len(image_features[0]))
+    ]
+    text_projection_weights = [
+        [0.1 * (random.random() * 2 - 1) for _ in range(embed_dim)] for _ in range(len(text_bow[0]))
+    ]
 
     lr = 0.2
     tau = 0.1
     epochs = 400
 
-    # 训练前检索效果
-    img_emb = image_features @ w_img
-    txt_emb = text_bow @ w_txt
-    logits = (img_emb @ txt_emb.T) / tau
-    i2t_before, t2i_before, _, _ = retrieval_top1(logits)
+    # 训练前
+    img_emb = matmul(image_features, image_projection_weights)
+    txt_emb = matmul(text_bow, text_projection_weights)
+    logits = scale(matmul(img_emb, transpose(txt_emb)), 1.0 / tau)
+    i2t_before, t2i_before, _ = retrieval_top1(logits)
 
-    eye = np.eye(n_samples, dtype=np.float32)
+    eye = [[1.0 if i == j else 0.0 for j in range(n)] for i in range(n)]
+
     for epoch in range(epochs):
-        # 前向
-        img_emb = image_features @ w_img
-        txt_emb = text_bow @ w_txt
-        logits = (img_emb @ txt_emb.T) / tau
+        img_emb = matmul(image_features, image_projection_weights)
+        txt_emb = matmul(text_bow, text_projection_weights)
+        logits = scale(matmul(img_emb, transpose(txt_emb)), 1.0 / tau)
 
-        # CLIP 常用的双向对比损失（图->文 + 文->图）
-        p_row = softmax(logits, axis=1)  # 每张图匹配哪个文本
-        p_col = softmax(logits, axis=0)  # 每段文本匹配哪个图
+        p_row = softmax_axis1(logits)
+        p_col = softmax_axis0(logits)
 
-        loss_i2t = -np.mean(np.log(p_row[np.arange(n_samples), np.arange(n_samples)] + 1e-12))
-        loss_t2i = -np.mean(np.log(p_col[np.arange(n_samples), np.arange(n_samples)] + 1e-12))
+        loss_i2t = -sum(math.log(p_row[i][i] + 1e-12) for i in range(n)) / n
+        loss_t2i = -sum(math.log(p_col[i][i] + 1e-12) for i in range(n)) / n
         loss = 0.5 * (loss_i2t + loss_t2i)
 
-        # 反向（线性映射下的简化梯度）
-        d_logits = 0.5 * ((p_row - eye) / n_samples + (p_col - eye) / n_samples)
-        d_img_emb = (d_logits @ txt_emb) / tau
-        d_txt_emb = (d_logits.T @ img_emb) / tau
+        # d_logits = 0.5 * ((p_row - eye)/n + (p_col - eye)/n)
+        d_logits = zeros(n, n)
+        for i in range(n):
+            for j in range(n):
+                d_logits[i][j] = 0.5 * (((p_row[i][j] - eye[i][j]) / n) + ((p_col[i][j] - eye[i][j]) / n))
 
-        d_w_img = image_features.T @ d_img_emb
-        d_w_txt = text_bow.T @ d_txt_emb
+        d_img_emb = scale(matmul(d_logits, txt_emb), 1.0 / tau)
+        d_txt_emb = scale(matmul(transpose(d_logits), img_emb), 1.0 / tau)
+        d_w_img = matmul(transpose(image_features), d_img_emb)
+        d_w_txt = matmul(transpose(text_bow), d_txt_emb)
 
-        w_img -= lr * d_w_img
-        w_txt -= lr * d_w_txt
+        image_projection_weights = sub(image_projection_weights, scale(d_w_img, lr))
+        text_projection_weights = sub(text_projection_weights, scale(d_w_txt, lr))
 
         if (epoch + 1) % 100 == 0:
             print(f"epoch {epoch + 1:3d} | loss = {loss:.4f}")
 
-    # 训练后检索效果
-    img_emb = image_features @ w_img
-    txt_emb = text_bow @ w_txt
-    logits = (img_emb @ txt_emb.T) / tau
-    i2t_after, t2i_after, i2t_idx, t2i_idx = retrieval_top1(logits)
+    # 训练后
+    img_emb = matmul(image_features, image_projection_weights)
+    txt_emb = matmul(text_bow, text_projection_weights)
+    logits = scale(matmul(img_emb, transpose(txt_emb)), 1.0 / tau)
+    i2t_after, t2i_after, i2t_idx = retrieval_top1(logits)
 
     print("\n=== 结果对比 ===")
     print(f"训练前 图->文 Top1 准确率: {i2t_before:.2f}")
@@ -125,15 +176,15 @@ def main():
     print(f"训练后 文->图 Top1 准确率: {t2i_after:.2f}")
 
     print("\n=== 图像检索文本示例 ===")
-    for i in range(n_samples):
-        print(f"图像{i} -> 文本{i2t_idx[i]} | GT={i} | text='{texts[i2t_idx[i]]}'")
+    for i in range(n):
+        print(f"图像{i} -> 文本{i2t_idx[i]} | Ground Truth={i} | text='{texts[i2t_idx[i]]}'")
 
     print("\n=== 你需要抓住的 CLIP 意义 ===")
-    print("1) 不再只学“图像分类头”，而是学“图像-文本对齐”的通用语义空间。")
-    print("2) 一旦对齐好，文本本身就能当分类器（零样本分类的基础）。")
-    print("3) 同一个空间支持跨模态检索：图找文、文找图。")
-    print("4) 这让模型从“固定标签任务”走向“自然语言驱动任务”。")
-    print(f"\n词表大小（用于文本编码）: {len(vocab)}")
+    print("1) 学的是图文对齐空间，而不是单一任务标签头。")
+    print("2) 文本提示词可直接变成分类器（零样本能力基础）。")
+    print("3) 支持跨模态检索：图找文、文找图。")
+    print("4) 让模型从固定类目走向自然语言驱动。")
+    print(f"\n词表大小: {len(vocab)}")
 
 
 if __name__ == "__main__":
